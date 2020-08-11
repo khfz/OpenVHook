@@ -19,6 +19,13 @@ static Script *		currentScript;
 
 std::mutex mutex;
 
+int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
+	LOG_ERROR("Caught exception 0x%X", type);
+	LOG_ERROR("Exception address 0x%p", ex->ExceptionRecord->ExceptionAddress);
+
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
 void Script::Tick() {
 
 	if ( mainFiber == nullptr ) {
@@ -42,12 +49,12 @@ void Script::Tick() {
 			__try {
 				LOG_PRINT("Launching script %s", reinterpret_cast<Script*>(handler)->name.c_str());
 				reinterpret_cast<Script*>( handler )->Run();
-			} __except (EXCEPTION_EXECUTE_HANDLER) {
-
+			} __except (ExceptionHandler(GetExceptionCode(), GetExceptionInformation())) {
 				LOG_ERROR("Error in script->Run");
 			}
 		}, this );
 	}
+
 }
 
 void Script::Run() {
