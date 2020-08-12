@@ -5,6 +5,9 @@
 #include "..\ASI Loader\ASILoader.h"
 #include "Types.h"
 
+#include <dxgi.h>
+#include <d3d11.h>
+
 using namespace Utility;
 
 #pragma comment(lib, "winmm.lib")
@@ -25,6 +28,9 @@ int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
 
 	return EXCEPTION_EXECUTE_HANDLER;
 }
+
+typedef void(*PresentCallback)(void *);
+
 
 void Script::Tick() {
 
@@ -372,6 +378,20 @@ int DLL_EXPORT worldGetAllPickups(int* array, int arraySize) {
 	}
 
 	return index;
+}
+
+void DLL_EXPORT	presentCallbackRegister(PresentCallback cb) {
+	static bool flag_warn_presentCallbackRegister = true;
+	if (flag_warn_presentCallbackRegister)
+		LOG_WARNING("plugin is trying to use presentCallbackRegister");
+	flag_warn_presentCallbackRegister = false;
+}
+
+void DLL_EXPORT presentCallbackUnregister(PresentCallback cb) {
+	static bool flag_warn_presentCallbackUnregister = true;
+	if (flag_warn_presentCallbackUnregister)
+		LOG_WARNING("plugin is trying to use presentCallbackUnregister");
+	flag_warn_presentCallbackUnregister = false;
 }
 
 DLL_EXPORT int createTexture(const char* fileName)
