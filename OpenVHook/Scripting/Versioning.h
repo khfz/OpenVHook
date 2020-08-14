@@ -92,6 +92,10 @@ static std::vector<std::string> GameVersionString = {
     "VER_1_0_1868_1_NOSTEAM",
 
     "VER_1_0_1868_4_EGS",
+
+	"VER_1_0_2060_0_STEAM",
+	"VER_1_0_2060_0_NOSTEAM",
+	"VER_1_0_2060_0_EGS",
 };
 
 int ScriptEngine::GetGameVersion()
@@ -170,6 +174,12 @@ int ScriptEngine::GetGameVersion()
 		return 54;
 	case 0xA0C18148:    // 1.0.1868.4 EPIC
 		return 58;
+	case 0x01:			// Steam Placeholder
+		return 59
+	case 0x02:			// Social Club Placeholder
+		return 60;
+	case 0x0:			// 1.0.2060.0 EPIC
+		return 61;
 	default:
 		return -1;
 	}
@@ -257,6 +267,10 @@ int ScriptEngine::GameVersionToSearchDepth(int version)
 	case 55:
 	case 58:
 		return 21;
+	case 59:
+	case 60:
+	case 61:
+		return 22;
 	default:
 		return fullHashMapDepth - 1;
 	}
