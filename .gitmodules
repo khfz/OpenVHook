@@ -4,3 +4,6 @@
 [submodule "DirectXTex"]
 	path = OpenVHook/DirectXTex
 	url = https://github.com/Microsoft/DirectXTex
+[submodule "OpenVHook/DirectXTK"]
+	path = OpenVHook/DirectXTK
+	url = https://github.com/microsoft/DirectXTK
