@@ -1,17 +1,26 @@
 #include "ScriptManager.h"
 #include "ScriptEngine.h"
+#include "Hook.h"
+#include "WICTextureLoader.h"
+#include "CommonStates.h"
+#include "SpriteBatch.h"
 #include "..\Utility\Log.h"
 #include "..\Utility\General.h"
 #include "..\ASI Loader\ASILoader.h"
 #include "Types.h"
-
-#include <d3d11.h>
-#include <d3dx11.h>
-#include <d3dx10.h>
+#include <stdio.h>
+#include <cstdlib>
+#include <wrl\wrappers\corewrappers.h>
+#include <wrl\client.h>
 
 using namespace Utility;
+using namespace DirectX;
+using namespace Hook;
+using namespace Microsoft::WRL;
 
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib,"d3d11.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 #define DLL_EXPORT __declspec( dllexport )
 
 enum eGameVersion;
@@ -21,6 +30,15 @@ ScriptManagerThread g_ScriptManagerThread;
 static HANDLE		mainFiber;
 static Script *		currentScript;
 
+ID3D11Device* Hook::pDevice = NULL;
+ID3D11DeviceContext* Hook::pContext = NULL;
+IDXGISwapChain* Hook::pSwapChain = NULL;
+ID3D11RenderTargetView* Hook::pRenderTargetView = NULL;
+
+static ComPtr<ID3D11ShaderResourceView> m_texture;
+static ComPtr<ID3D11Resource> resource;
+static std::unique_ptr<CommonStates> m_states;
+
 std::mutex mutex;
 
 int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
@@ -29,9 +47,6 @@ int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
 
 	return EXCEPTION_EXECUTE_HANDLER;
 }
-
-typedef void(*PresentCallback)(void *);
-
 
 void Script::Tick() {
 
@@ -195,9 +210,9 @@ void ScriptManagerThread::RemoveScript( HMODULE module ) {
 	m_scripts.erase( pair );
 }
 
-void DLL_EXPORT scriptWait( unsigned long waitTime ) {
+void DLL_EXPORT scriptWait(DWORD Time) {
 
-	currentScript->Yield( waitTime );
+	currentScript->Yield( Time );
 }
 
 void DLL_EXPORT scriptRegister( HMODULE module, void( *function )( ) ) {
@@ -228,13 +243,13 @@ eGameVersion DLL_EXPORT getGameVersion() {
 static ScriptManagerContext g_context;
 static uint64_t g_hash;
 
-void DLL_EXPORT nativeInit( uint64_t hash ) {
+void DLL_EXPORT nativeInit(UINT64 hash ) {
 
 	g_context.Reset();
 	g_hash = hash;
 }
 
-void DLL_EXPORT nativePush64( uint64_t value ) {
+void DLL_EXPORT nativePush64(UINT64 value ) {
 
 	g_context.Push( value );
 }
@@ -258,16 +273,16 @@ DLL_EXPORT uint64_t * nativeCall() {
 	return reinterpret_cast<uint64_t*>( g_context.GetResultPointer() );
 }
 
-typedef void( *TKeyboardFn )( DWORD key, WORD repeats, BYTE scanCode, BOOL isExtended, BOOL isWithAlt, BOOL wasDownBefore, BOOL isUpNow );
+typedef void(*KeyboardHandler)(DWORD, WORD, BYTE, BOOL, BOOL, BOOL, BOOL);
 
-static std::set<TKeyboardFn> g_keyboardFunctions;
+static std::set<KeyboardHandler> g_keyboardFunctions;
 
-void DLL_EXPORT keyboardHandlerRegister( TKeyboardFn function ) {
+void DLL_EXPORT keyboardHandlerRegister(KeyboardHandler function ) {
 
 	g_keyboardFunctions.insert( function );
 }
 
-void DLL_EXPORT keyboardHandlerUnregister( TKeyboardFn function ) {
+void DLL_EXPORT keyboardHandlerUnregister(KeyboardHandler function ) {
 
 	g_keyboardFunctions.erase( function );
 }
@@ -381,37 +396,102 @@ int DLL_EXPORT worldGetAllPickups(int* array, int arraySize) {
 	return index;
 }
 
-void DLL_EXPORT	presentCallbackRegister(PresentCallback cb) {
+void Script::Start()
+{
+	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if (FAILED(hr)) {
+		LOG_ERROR("Failure to Intialize COM Libary");
+	}
+
+	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
+
+	HWND hWindow = FindWindowA(NULL, "Window"); // TODO: Modify this.
+
+#pragma region Initialise DXGI_SWAP_CHAIN_DESC
+	DXGI_SWAP_CHAIN_DESC scd;
+	ZeroMemory(&scd, sizeof(scd));
+
+	scd.BufferCount = 1;
+	scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // sets color formatting, we are using RGBA
+	scd.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	scd.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // says what we are doing with the buffer
+	scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // msdn explains better than i can: https://msdn.microsoft.com/en-us/library/windows/desktop/bb173076(v=vs.85).aspx
+	scd.OutputWindow = hWindow; // our gamewindow, obviously
+	scd.SampleDesc.Count = 1; // Set to 1 to disable multisampling
+	scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // D3D related stuff, cant really describe what it does
+	scd.Windowed = ((GetWindowLongPtr(hWindow, GWL_STYLE) & WS_POPUP) != 0) ? false : true; // check if our game is windowed
+	scd.BufferDesc.Width = 1920; // temporary width
+	scd.BufferDesc.Height = 1080; // temporary height
+	scd.BufferDesc.RefreshRate.Numerator = 144; // refreshrate in Hz
+	scd.BufferDesc.RefreshRate.Denominator = 1; // no clue, lol
+#pragma endregion
+
+	if (FAILED(D3D11CreateDeviceAndSwapChain(
+		NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
+		NULL, &featureLevel, 1, D3D11_SDK_VERSION,
+		&scd, &Hook::pSwapChain,
+		&Hook::pDevice, NULL, &Hook::pContext
+	)))
+	{// failed to create D3D11 device
+		return;
+	}
+
+	//Get VTable Pointers
+	DWORD_PTR* pSwapChainVT = reinterpret_cast<DWORD_PTR*>(Hook::pSwapChain);
+	DWORD_PTR* pDeviceVT = reinterpret_cast<DWORD_PTR*>(Hook::pDevice); // Device not needed, but prolly need it to draw stuff in Present, so it is included
+	DWORD_PTR* pContextVT = reinterpret_cast<DWORD_PTR*>(Hook::pContext);
+
+	//Pointer->Table
+	pSwapChainVT = reinterpret_cast<DWORD_PTR*>(pSwapChainVT[0]);
+	pDeviceVT = reinterpret_cast<DWORD_PTR*>(pDeviceVT[0]);
+	pContextVT = reinterpret_cast<DWORD_PTR*>(pContextVT[0]);
+
+	Hook::oPresent = reinterpret_cast<tD3D11Present>(pSwapChainVT[8]); // Present Function
+
+	//Hook using Detour
+	Hook::HookFunction(reinterpret_cast<PVOID*>(&Hook::oPresent), Hook::D3D11Present);
+}
+
+DLL_EXPORT void presentCallbackRegister(PresentCallback cb) {
 	static bool flag_warn_presentCallbackRegister = true;
 	if (flag_warn_presentCallbackRegister)
 		LOG_WARNING("plugin is trying to use presentCallbackRegister");
 	flag_warn_presentCallbackRegister = false;
+	
 }
 
-void DLL_EXPORT presentCallbackUnregister(PresentCallback cb) {
+DLL_EXPORT void presentCallbackUnregister(PresentCallback cb) {
 	static bool flag_warn_presentCallbackUnregister = true;
 	if (flag_warn_presentCallbackUnregister)
 		LOG_WARNING("plugin is trying to use presentCallbackUnregister");
 	flag_warn_presentCallbackUnregister = false;
 }
 
-DLL_EXPORT int createTexture(const char* fileName)
-{	
-	static bool flag_warn_createTexture = true;
-	if(flag_warn_createTexture)
-		LOG_WARNING("plugin is trying to use createTexture");
-	flag_warn_createTexture = false;
-	return 0;
+DLL_EXPORT int createTexture(const char* fileName) {
+	size_t size = strlen(fileName) + 1;
+	size_t convertedChars;
+	wchar_t* temp = new wchar_t[size];
+	mbstowcs_s(&convertedChars, temp, size, fileName, _TRUNCATE);
+	HRESULT Status = CreateWICTextureFromFile(pDevice, pContext, temp, resource.GetAddressOf(), m_texture.ReleaseAndGetAddressOf());
+	if (FAILED(Status)) {
+		LOG_ERROR("Failed to create texture");
+	}
+	ComPtr<ID3D11Texture2D> texture;
+	DX::ThrowIfFailed(resource.As(&texture));
+	CD3D11_TEXTURE2D_DESC textureDesc;
+	texture->GetDesc(&textureDesc);
+	m_states = std::make_unique<CommonStates>(pDevice);
+	return NULL;
 }
 
 DLL_EXPORT void drawTexture(int id, int index, int level, int time,
 	float sizeX, float sizeY, float centerX, float centerY,
 	float posX, float posY, float rotation, float screenHeightScaleFactor,
-	float r, float g, float b, float a)
-{
-	static bool flag_warn_drawTexture = true;
-	if (flag_warn_drawTexture)
-		LOG_WARNING("plugin is trying to use drawTexture");
-	flag_warn_drawTexture = false;
+	float r, float g, float b, float a) {
+	std::unique_ptr<SpriteBatch> spriteBatch;
+	spriteBatch = std::make_unique<SpriteBatch>(pContext);
+	spriteBatch->Begin(SpriteSortMode_Deferred, m_states->NonPremultiplied());
+	spriteBatch->Draw(m_texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r,g,b,a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
+	spriteBatch->End();
 }
-

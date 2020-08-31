@@ -3,6 +3,9 @@
 
 #include "ScriptEngine.h"
 #include "NativeInvoker.h"
+#include <d3d11.h>
+#include <d3dcompiler.h>
+#include <DirectXMath.h>
 
 class ScriptManagerContext : public NativeContext {
 public:
@@ -53,6 +56,8 @@ public:
 
 	std::string     name;
 
+	static void			Start();
+
 private:
 
 	HANDLE			scriptFiber;
@@ -83,6 +88,36 @@ public:
 namespace ScriptManager {
 
 	void					HandleKeyEvent(DWORD key, WORD repeats, BYTE scanCode, BOOL isExtended, BOOL isWithAlt, BOOL wasDownBefore, BOOL isUpNow);
+}
+
+namespace DX
+{
+	// Helper class for COM exceptions
+	class com_exception : public std::exception
+	{
+	public:
+		com_exception(HRESULT hr) : result(hr) {}
+
+		const char* what() const override
+		{
+			static char s_str[64] = {};
+			sprintf_s(s_str, "Failure with HRESULT of %08X",
+				static_cast<unsigned int>(result));
+			return s_str;
+		}
+
+	private:
+		HRESULT result;
+	};
+
+	// Helper utility converts D3D API failures into exceptions.
+	inline void ThrowIfFailed(HRESULT hr)
+	{
+		if (FAILED(hr))
+		{
+			throw com_exception(hr);
+		}
+	}
 }
 
 extern ScriptManagerThread	g_ScriptManagerThread;

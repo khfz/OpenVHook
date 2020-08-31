@@ -2,6 +2,7 @@
 #include "ASI Loader\ASILoader.h"
 #include "Scripting\ScriptEngine.h"
 #include "Scripting\ScriptManager.h"
+#include "Scripting\Hook.h"
 #include "Utility\Console.h"
 #include "Utility\General.h"
 #include "Utility\Pattern.h"
@@ -85,13 +86,18 @@ void Cleanup() {
 	}
 }
 
+void temp() {
+	Script::Start();
+}
+
 BOOL APIENTRY DllMain( HINSTANCE hModule, DWORD dwReason, LPVOID lpvReserved ) {
 
 	switch ( dwReason ) {
 		case DLL_PROCESS_ATTACH: {
-
-			SetOurModuleHandle( hModule );
+			SetOurModuleHandle(hModule);
 			initThread.Run();
+			DisableThreadLibraryCalls(hModule);
+			CreateThread(NULL, NULL, reinterpret_cast<LPTHREAD_START_ROUTINE>(temp), NULL, NULL, NULL);
 			break;
 		}
 		case DLL_PROCESS_DETACH: {
