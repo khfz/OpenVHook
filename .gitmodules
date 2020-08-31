@@ -1,12 +1,3 @@
-[submodule "DirectXTK"]
-	path = OpenVHook/DirectXTK
-	url = https://github.com/microsoft/DirectXTK
-[submodule "DirectXTex"]
-	path = OpenVHook/DirectXTex
-	url = https://github.com/Microsoft/DirectXTex
 [submodule "OpenVHook/DirectXTK"]
 	path = OpenVHook/DirectXTK
 	url = https://github.com/microsoft/DirectXTK
-[submodule "OpenVHook/DirectXTex"]
-	path = OpenVHook/DirectXTex
-	url = https://github.com/microsoft/DirectXTex

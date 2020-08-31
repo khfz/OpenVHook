@@ -41,6 +41,27 @@
     <ClCompile Include="Scripting\Pools.cpp">
       <Filter>Scripting\Pools</Filter>
     </ClCompile>
+    <ClCompile Include="Scripting\Hook.cpp">
+      <Filter>Scripting\DirectX Hook</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\CommonStates.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\WICTextureLoader.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\SpriteBatch.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\SimpleMath.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\VertexTypes.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
+    <ClCompile Include="DirectXTK\Src\BufferHelpers.cpp">
+      <Filter>DirectXTK</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Input">
@@ -90,6 +111,12 @@
     </Filter>
     <Filter Include="Scripting\Pools">
       <UniqueIdentifier>{35981836-3de3-4b64-82c5-daa0cc5cfd2d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Scripting\DirectX Hook">
+      <UniqueIdentifier>{85c9348d-c852-4a34-bfe1-6694d42445fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DirectXTK">
+      <UniqueIdentifier>{767df8f2-ae02-45de-b5fc-b34ab10fda85}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -153,6 +180,27 @@
     </ClInclude>
     <ClInclude Include="Scripting\Pools.h">
       <Filter>Scripting\Pools</Filter>
+    </ClInclude>
+    <ClInclude Include="Scripting\Hook.h">
+      <Filter>Scripting\DirectX Hook</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\WICTextureLoader.h">
+      <Filter>DirectXTK</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\SpriteBatch.h">
+      <Filter>DirectXTK</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\CommonStates.h">
+      <Filter>DirectXTK</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\SimpleMath.h">
+      <Filter>DirectXTK</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\VertexTypes.h">
+      <Filter>DirectXTK</Filter>
+    </ClInclude>
+    <ClInclude Include="DirectXTK\Inc\BufferHelpers.h">
+      <Filter>DirectXTK</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
