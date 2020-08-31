@@ -1,6 +1,6 @@
 #include <stdint.h>				  
 
-#define fullHashMapCount 0x1884
+#define fullHashMapCount 0x189E
 #define fullHashMapDepth 23
 
 uint64_t fullHashMap[fullHashMapCount][fullHashMapDepth] = {

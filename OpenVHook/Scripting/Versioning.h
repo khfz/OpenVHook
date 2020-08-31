@@ -174,9 +174,9 @@ int ScriptEngine::GetGameVersion()
 		return 54;
 	case 0xA0C18148:    // 1.0.1868.4 EPIC
 		return 58;
-	case 0x01:			// Steam Placeholder
-		return 59
-	case 0x02:			// Social Club Placeholder
+	case 0x02:			// Steam Placeholder
+		return 59;
+	case 0x03:			// Social Club Placeholder
 		return 60;
 	case 0x0:			// 1.0.2060.0 EPIC
 		return 61;
