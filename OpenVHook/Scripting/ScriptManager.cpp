@@ -10,6 +10,7 @@
 #include "Types.h"
 #include <stdio.h>
 #include <cstdlib>
+#include <chrono>
 #include <wrl\wrappers\corewrappers.h>
 #include <wrl\client.h>
 
@@ -38,6 +39,8 @@ ID3D11RenderTargetView* Hook::pRenderTargetView = NULL;
 static ComPtr<ID3D11ShaderResourceView> m_texture;
 static ComPtr<ID3D11Resource> resource;
 static std::unique_ptr<CommonStates> m_states;
+
+static int textureId = 0; 
 
 std::mutex mutex;
 
@@ -453,6 +456,8 @@ void Script::Start()
 	Hook::HookFunction(reinterpret_cast<PVOID*>(&Hook::oPresent), Hook::D3D11Present);
 }
 
+typedef void(*PresentCallback)(void*);
+
 DLL_EXPORT void presentCallbackRegister(PresentCallback cb) {
 	static bool flag_warn_presentCallbackRegister = true;
 	if (flag_warn_presentCallbackRegister)
@@ -469,29 +474,53 @@ DLL_EXPORT void presentCallbackUnregister(PresentCallback cb) {
 }
 
 DLL_EXPORT int createTexture(const char* fileName) {
+
+	//convert fileName to a wchar_t
 	size_t size = strlen(fileName) + 1;
 	size_t convertedChars;
 	wchar_t* temp = new wchar_t[size];
 	mbstowcs_s(&convertedChars, temp, size, fileName, _TRUNCATE);
+
+	//Create texture using WIC
 	HRESULT Status = CreateWICTextureFromFile(pDevice, pContext, temp, resource.GetAddressOf(), m_texture.ReleaseAndGetAddressOf());
 	if (FAILED(Status)) {
 		LOG_ERROR("Failed to create texture");
 	}
+
 	ComPtr<ID3D11Texture2D> texture;
 	DX::ThrowIfFailed(resource.As(&texture));
+
 	CD3D11_TEXTURE2D_DESC textureDesc;
 	texture->GetDesc(&textureDesc);
-	m_states = std::make_unique<CommonStates>(pDevice);
-	return NULL;
+
+	if (textureId != 0) {
+		textureId++;
+	}
+	LOG_PRINT("Creating Texture", fileName, ", id", textureId); 
+
+	return textureId;
 }
 
 DLL_EXPORT void drawTexture(int id, int index, int level, int time,
 	float sizeX, float sizeY, float centerX, float centerY,
 	float posX, float posY, float rotation, float screenHeightScaleFactor,
 	float r, float g, float b, float a) {
+
+	m_states = std::make_unique<CommonStates>(pDevice);
 	std::unique_ptr<SpriteBatch> spriteBatch;
 	spriteBatch = std::make_unique<SpriteBatch>(pContext);
+
 	spriteBatch->Begin(SpriteSortMode_Deferred, m_states->NonPremultiplied());
-	spriteBatch->Draw(m_texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r,g,b,a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
+	spriteBatch->Draw(m_texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r, g, b, a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
 	spriteBatch->End();
+
+	//count time since drawn using chrono
+	bool elapsedtime = false; 
+	while (elapsedtime != true) {
+		std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+		if (time = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) {
+			elapsedtime = true;
+		}
+	}
 }
