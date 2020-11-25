@@ -1,8 +1,10 @@
 #include "ScriptEngine.h"
 #include "..\Utility\Pattern.h"
 #include "Versioning.h"
+#include "Hooking.h"
 
 using namespace Utility;
+using namespace hooking;
 
 static pgPtrCollection<ScriptThread> * scrThreadCollection;
 static uint32_t activeThreadTlsOffset;
@@ -107,15 +109,16 @@ bool ScriptEngine::Initialize() {
 	activeThreadTlsOffset = *pattern("48 8B 04 D0 4A 8B 14 00 48 8B 01 F3 44 0F 2C 42 20").count(1).get(0).get<uint32_t>(-4);
 	LOG_DEBUG("activeThreadTlsOffset 0x%.8X", activeThreadTlsOffset);
 
-	auto scrThreadIdPattern = pattern("89 15 ? ? ? ? 48 8B 0C D8");
+	auto scrThreadIdPattern = pattern("33 FF 48 85 C0 74 08 48 8B C8 E8");
 
-	location = scrThreadIdPattern.count(1).get(0).get<char>(0);
+	location = scrThreadIdPattern.count(1).get(0).get<char>(-9);
 	if (location == nullptr) {
 
 		LOG_ERROR("Unable to find scrThreadId");
 		return false;
 	}
-	scrThreadId = reinterpret_cast<decltype(scrThreadId)>(location + *(int32_t*)(location + 2) + 6);
+	scrThreadId = get_address<uint32_t*>(location) - 2;
+	//scrThreadId = reinterpret_cast<decltype(scrThreadId)>(location + *(int32_t*)(location + 2) + 6);
 	LOG_DEBUG("scrThreadId\t\t 0x%p (0x%.8X)", scrThreadId, reinterpret_cast<uintptr_t>(scrThreadId) - executable.begin());
 
 	auto scrThreadCountPattern = pattern("FF 0D ? ? ? ? 48 8B F9");
