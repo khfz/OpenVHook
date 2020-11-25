@@ -178,8 +178,8 @@ int ScriptEngine::GetGameVersion()
 		return 58;
 	case 0x02:			// Steam Placeholder
 		return 59;
-	case 0x0:			// 1.0.2060.0 EPIC
-		return 60;
+	case 0x0:			// 1.0.2060.0 NONSTEAM
+		return 62;
 	case 59:			// 1.0.2060.1 STEAM Placeholder
 		return 61;
 	case 60:			// 1.0.2060.1 NONSTEAM
