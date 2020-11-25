@@ -10,7 +10,9 @@
 #include "Types.h"
 #include <stdio.h>
 #include <cstdlib>
+#include <iterator> 
 #include <chrono>
+#include <map> 
 #include <wrl\wrappers\corewrappers.h>
 #include <wrl\client.h>
 
@@ -18,6 +20,7 @@ using namespace Utility;
 using namespace DirectX;
 using namespace Hook;
 using namespace Microsoft::WRL;
+using namespace std;
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib,"d3d11.lib")
@@ -38,11 +41,13 @@ ID3D11RenderTargetView* Hook::pRenderTargetView = NULL;
 
 static ComPtr<ID3D11ShaderResourceView> m_texture;
 static ComPtr<ID3D11Resource> resource;
-static std::unique_ptr<CommonStates> m_states;
+static unique_ptr<CommonStates> m_states;
+
+static map<int, ComPtr<ID3D11ShaderResourceView>> idmap;
 
 static int textureId = 0; 
 
-std::mutex mutex;
+std::mutex Mutex;
 
 int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
 	LOG_ERROR("Caught exception 0x%X", type);
@@ -95,7 +100,7 @@ void Script::Yield( uint32_t time ) {
 
 void ScriptManagerThread::DoRun() {
 
-	std::unique_lock<std::mutex> lock(mutex);
+	std::unique_lock<std::mutex> lock(Mutex);
 
 	scriptMap thisIterScripts( m_scripts );
 
@@ -200,7 +205,7 @@ void ScriptManagerThread::RemoveScript( void( *fn )( ) ) {
 
 void ScriptManagerThread::RemoveScript( HMODULE module ) {
 
-	std::unique_lock<std::mutex> lock(mutex);
+	std::unique_lock<std::mutex> lock(Mutex);
 
 	auto pair = m_scripts.find( module );
 	if ( pair == m_scripts.end() ) {
@@ -454,6 +459,7 @@ void Script::Start()
 
 	//Hook using Detour
 	Hook::HookFunction(reinterpret_cast<PVOID*>(&Hook::oPresent), Hook::D3D11Present);
+
 }
 
 typedef void(*PresentCallback)(void*);
@@ -463,6 +469,7 @@ DLL_EXPORT void presentCallbackRegister(PresentCallback cb) {
 	if (flag_warn_presentCallbackRegister)
 		LOG_WARNING("plugin is trying to use presentCallbackRegister");
 	flag_warn_presentCallbackRegister = false;
+
 	
 }
 
@@ -496,6 +503,7 @@ DLL_EXPORT int createTexture(const char* fileName) {
 	if (textureId != 0) {
 		textureId++;
 	}
+	idmap.insert(pair<int, ComPtr<ID3D11ShaderResourceView>>(textureId, m_texture));
 	LOG_PRINT("Creating Texture", fileName, ", id", textureId); 
 
 	return textureId;
@@ -505,22 +513,26 @@ DLL_EXPORT void drawTexture(int id, int index, int level, int time,
 	float sizeX, float sizeY, float centerX, float centerY,
 	float posX, float posY, float rotation, float screenHeightScaleFactor,
 	float r, float g, float b, float a) {
+	ComPtr<ID3D11ShaderResourceView> texture = idmap[id];
 
+	//setup sprite drawing
 	m_states = std::make_unique<CommonStates>(pDevice);
-	std::unique_ptr<SpriteBatch> spriteBatch;
+	unique_ptr<SpriteBatch> spriteBatch;
 	spriteBatch = std::make_unique<SpriteBatch>(pContext);
 
-	spriteBatch->Begin(SpriteSortMode_Deferred, m_states->NonPremultiplied());
-	spriteBatch->Draw(m_texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r, g, b, a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
-	spriteBatch->End();
+	unsigned int last_call_time = timeGetTime();
+	bool elapsedtime = false;
 
-	//count time since drawn using chrono
-	bool elapsedtime = false; 
-	while (elapsedtime != true) {
-		std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-		if (time = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) {
+	//Use sprites to draw texture
+	while (elapsedtime == false) {
+		spriteBatch->Begin(SpriteSortMode_Deferred, m_states->NonPremultiplied());
+		spriteBatch->Draw(texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r, g, b, a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
+		spriteBatch->End();
+		unsigned int now_time = timeGetTime();
+		if (now_time > (last_call_time + time))
+		{
 			elapsedtime = true;
+			last_call_time = timeGetTime(); //last time is re initialized
 		}
 	}
 }
