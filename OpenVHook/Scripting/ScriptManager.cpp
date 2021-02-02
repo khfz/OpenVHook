@@ -1,26 +1,19 @@
 #include "ScriptManager.h"
 #include "ScriptEngine.h"
-#include "Hook.h"
 #include "WICTextureLoader.h"
 #include "CommonStates.h"
 #include "SpriteBatch.h"
 #include "..\Utility\Log.h"
 #include "..\Utility\General.h"
 #include "..\ASI Loader\ASILoader.h"
+#include "kiero/kiero.h"
 #include "Types.h"
-#include <stdio.h>
-#include <cstdlib>
-#include <iterator> 
-#include <chrono>
-#include <map> 
 #include <wrl\wrappers\corewrappers.h>
 #include <wrl\client.h>
 
 using namespace Utility;
 using namespace DirectX;
-using namespace Hook;
 using namespace Microsoft::WRL;
-using namespace std;
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib,"d3d11.lib")
@@ -34,20 +27,31 @@ ScriptManagerThread g_ScriptManagerThread;
 static HANDLE		mainFiber;
 static Script *		currentScript;
 
-ID3D11Device* Hook::pDevice = NULL;
-ID3D11DeviceContext* Hook::pContext = NULL;
-IDXGISwapChain* Hook::pSwapChain = NULL;
-ID3D11RenderTargetView* Hook::pRenderTargetView = NULL;
+tD3D11Present kiero::oPresent = NULL;
+ID3D11RenderTargetView* kiero::renderTargetView = NULL;
+bool bOnce = false;
 
-static ComPtr<ID3D11ShaderResourceView> m_texture;
-static ComPtr<ID3D11Resource> resource;
-static unique_ptr<CommonStates> m_states;
+ComPtr<ID3D11ShaderResourceView> m_texture;
+std::unique_ptr<CommonStates> m_states;
+ComPtr<ID3D11ShaderResourceView> texture; 
 
-static map<int, ComPtr<ID3D11ShaderResourceView>> idmap;
+int drawtime;
+XMFLOAT2 pos;
+SimpleMath::Color color;
+float Rotation; 
+XMFLOAT2 center;
+float scaleFactor;
+bool draw = false;
+float drawlevel = 0.0f;
 
-static int textureId = 0; 
+unsigned int last_call_time;
+bool elapsedtime = false;
 
-std::mutex Mutex;
+std::unique_ptr<SpriteBatch> spriteBatch;
+std::map<int, ComPtr<ID3D11ShaderResourceView>> idmap;
+int textureId = -1; 
+
+std::mutex mutex;
 
 int ExceptionHandler(int type, PEXCEPTION_POINTERS ex) {
 	LOG_ERROR("Caught exception 0x%X", type);
@@ -100,7 +104,7 @@ void Script::Yield( uint32_t time ) {
 
 void ScriptManagerThread::DoRun() {
 
-	std::unique_lock<std::mutex> lock(Mutex);
+	std::unique_lock<std::mutex> lock(mutex);
 
 	scriptMap thisIterScripts( m_scripts );
 
@@ -141,9 +145,9 @@ bool ScriptManagerThread::LoadScripts() {
 	for (auto && scriptName : m_scriptNames)
 	{
 		LOG_PRINT("Loading \"%s\"", scriptName.c_str());
-		HMODULE module = LoadLibraryA(scriptName.c_str());
-		if (module) {
-			LOG_PRINT("\tLoaded \"%s\" => 0x%p", scriptName.c_str(), module);
+		HMODULE Module = LoadLibraryA(scriptName.c_str());
+		if (Module) {
+			LOG_PRINT("\tLoaded \"%s\" => 0x%p", scriptName.c_str(), Module);
 		} else {
 			LOG_DEBUG("\tSkip \"%s\"", scriptName.c_str());
 		}
@@ -170,12 +174,12 @@ void ScriptManagerThread::FreeScripts() {
 	m_scripts.clear();
 }
 
-void ScriptManagerThread::AddScript( HMODULE module, void( *fn )( ) ) {
+void ScriptManagerThread::AddScript( HMODULE Module, void( *fn )( ) ) {
 
-	const std::string moduleName = GetModuleFullName( module );
+	const std::string moduleName = GetModuleFullName( Module );
 	const std::string shortName = GetFilename(moduleName);
 
-	if (m_scripts.find( module ) == m_scripts.end())	
+	if (m_scripts.find( Module ) == m_scripts.end())	
 		LOG_PRINT("Registering script '%s' (0x%p)", shortName.c_str(), fn);
 	else 
 		LOG_PRINT("Registering additional script thread '%s' (0x%p)", shortName.c_str(), fn);
@@ -186,7 +190,7 @@ void ScriptManagerThread::AddScript( HMODULE module, void( *fn )( ) ) {
 		m_scriptNames.push_back( moduleName );
 	}
 
-	m_scripts[module].push_back(std::make_shared<Script>( fn, shortName ));
+	m_scripts[Module].push_back(std::make_shared<Script>( fn, shortName ));
 }
 
 void ScriptManagerThread::RemoveScript( void( *fn )( ) ) {
@@ -203,18 +207,18 @@ void ScriptManagerThread::RemoveScript( void( *fn )( ) ) {
 	}
 }
 
-void ScriptManagerThread::RemoveScript( HMODULE module ) {
+void ScriptManagerThread::RemoveScript( HMODULE Module ) {
 
-	std::unique_lock<std::mutex> lock(Mutex);
+	std::unique_lock<std::mutex> lock(mutex);
 
-	auto pair = m_scripts.find( module );
+	auto pair = m_scripts.find( Module );
 	if ( pair == m_scripts.end() ) {
 
-		LOG_ERROR( "Could not find script for module 0x%p", module );
+		LOG_ERROR( "Could not find script for module 0x%p", Module );
 		return;
 	}
 
-	LOG_PRINT( "Unregistered script '%s'", GetModuleNameWithoutExtension( module ).c_str() );
+	LOG_PRINT( "Unregistered script '%s'", GetModuleNameWithoutExtension( Module ).c_str() );
 	m_scripts.erase( pair );
 }
 
@@ -223,14 +227,14 @@ void DLL_EXPORT scriptWait(DWORD Time) {
 	currentScript->Yield( Time );
 }
 
-void DLL_EXPORT scriptRegister( HMODULE module, void( *function )( ) ) {
+void DLL_EXPORT scriptRegister( HMODULE Module, void( *function )( ) ) {
 
-	g_ScriptManagerThread.AddScript( module, function );
+	g_ScriptManagerThread.AddScript( Module, function );
 }
 
-void DLL_EXPORT scriptRegisterAdditionalThread(HMODULE module, void(*function)()) {
+void DLL_EXPORT scriptRegisterAdditionalThread(HMODULE Module, void(*function)()) {
 
-	g_ScriptManagerThread.AddScript(module, function);
+	g_ScriptManagerThread.AddScript(Module, function);
 }
 
 void DLL_EXPORT scriptUnregister( void( *function )( ) ) {
@@ -238,9 +242,9 @@ void DLL_EXPORT scriptUnregister( void( *function )( ) ) {
 	g_ScriptManagerThread.RemoveScript( function );
 }
 
-void DLL_EXPORT scriptUnregister( HMODULE module ) {
+void DLL_EXPORT scriptUnregister( HMODULE Module ) {
 	
-	g_ScriptManagerThread.RemoveScript( module );
+	g_ScriptManagerThread.RemoveScript( Module );
 }
 
 eGameVersion DLL_EXPORT getGameVersion() {
@@ -274,7 +278,7 @@ DLL_EXPORT uint64_t * nativeCall() {
             scrNativeCallContext::SetVectorResults(&g_context);
 		} __except ( EXCEPTION_EXECUTE_HANDLER ) {
 
-			LOG_ERROR( "Error in nativeCall" );
+			LOG_ERROR( "Error in nativeCall");
 		}
 	}
 
@@ -404,84 +408,19 @@ int DLL_EXPORT worldGetAllPickups(int* array, int arraySize) {
 	return index;
 }
 
-void Script::Start()
-{
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-	if (FAILED(hr)) {
-		LOG_ERROR("Failure to Intialize COM Libary");
-	}
-
-	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-
-	HWND hWindow = FindWindowA(NULL, "Window"); // TODO: Modify this.
-
-#pragma region Initialise DXGI_SWAP_CHAIN_DESC
-	DXGI_SWAP_CHAIN_DESC scd;
-	ZeroMemory(&scd, sizeof(scd));
-
-	scd.BufferCount = 1;
-	scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // sets color formatting, we are using RGBA
-	scd.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	scd.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // says what we are doing with the buffer
-	scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // msdn explains better than i can: https://msdn.microsoft.com/en-us/library/windows/desktop/bb173076(v=vs.85).aspx
-	scd.OutputWindow = hWindow; // our gamewindow, obviously
-	scd.SampleDesc.Count = 1; // Set to 1 to disable multisampling
-	scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // D3D related stuff, cant really describe what it does
-	scd.Windowed = ((GetWindowLongPtr(hWindow, GWL_STYLE) & WS_POPUP) != 0) ? false : true; // check if our game is windowed
-	scd.BufferDesc.Width = 1920; // temporary width
-	scd.BufferDesc.Height = 1080; // temporary height
-	scd.BufferDesc.RefreshRate.Numerator = 144; // refreshrate in Hz
-	scd.BufferDesc.RefreshRate.Denominator = 1; // no clue, lol
-#pragma endregion
-
-	if (FAILED(D3D11CreateDeviceAndSwapChain(
-		NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
-		NULL, &featureLevel, 1, D3D11_SDK_VERSION,
-		&scd, &Hook::pSwapChain,
-		&Hook::pDevice, NULL, &Hook::pContext
-	)))
-	{// failed to create D3D11 device
-		return;
-	}
-
-	//Get VTable Pointers
-	DWORD_PTR* pSwapChainVT = reinterpret_cast<DWORD_PTR*>(Hook::pSwapChain);
-	DWORD_PTR* pDeviceVT = reinterpret_cast<DWORD_PTR*>(Hook::pDevice); // Device not needed, but prolly need it to draw stuff in Present, so it is included
-	DWORD_PTR* pContextVT = reinterpret_cast<DWORD_PTR*>(Hook::pContext);
-
-	//Pointer->Table
-	pSwapChainVT = reinterpret_cast<DWORD_PTR*>(pSwapChainVT[0]);
-	pDeviceVT = reinterpret_cast<DWORD_PTR*>(pDeviceVT[0]);
-	pContextVT = reinterpret_cast<DWORD_PTR*>(pContextVT[0]);
-
-	Hook::oPresent = reinterpret_cast<tD3D11Present>(pSwapChainVT[8]); // Present Function
-
-	//Hook using Detour
-	Hook::HookFunction(reinterpret_cast<PVOID*>(&Hook::oPresent), Hook::D3D11Present);
-
-}
-
 typedef void(*PresentCallback)(void*);
 
-DLL_EXPORT void presentCallbackRegister(PresentCallback cb) {
-	static bool flag_warn_presentCallbackRegister = true;
-	if (flag_warn_presentCallbackRegister)
-		LOG_WARNING("plugin is trying to use presentCallbackRegister");
-	flag_warn_presentCallbackRegister = false;
+static std::set<PresentCallback> g_PresentCallback;
 
-	
+DLL_EXPORT void presentCallbackRegister(PresentCallback cb) {
+	g_PresentCallback.insert(cb);
 }
 
 DLL_EXPORT void presentCallbackUnregister(PresentCallback cb) {
-	static bool flag_warn_presentCallbackUnregister = true;
-	if (flag_warn_presentCallbackUnregister)
-		LOG_WARNING("plugin is trying to use presentCallbackUnregister");
-	flag_warn_presentCallbackUnregister = false;
+	g_PresentCallback.erase(cb);
 }
 
 DLL_EXPORT int createTexture(const char* fileName) {
-
 	//convert fileName to a wchar_t
 	size_t size = strlen(fileName) + 1;
 	size_t convertedChars;
@@ -489,50 +428,72 @@ DLL_EXPORT int createTexture(const char* fileName) {
 	mbstowcs_s(&convertedChars, temp, size, fileName, _TRUNCATE);
 
 	//Create texture using WIC
-	HRESULT Status = CreateWICTextureFromFile(pDevice, pContext, temp, resource.GetAddressOf(), m_texture.ReleaseAndGetAddressOf());
+	HRESULT Status = CreateWICTextureFromFile(kiero::device, kiero::context, temp, nullptr, m_texture.ReleaseAndGetAddressOf());
 	if (FAILED(Status)) {
 		LOG_ERROR("Failed to create texture");
 	}
 
-	ComPtr<ID3D11Texture2D> texture;
-	DX::ThrowIfFailed(resource.As(&texture));
-
-	CD3D11_TEXTURE2D_DESC textureDesc;
-	texture->GetDesc(&textureDesc);
-
-	if (textureId != 0) {
-		textureId++;
-	}
-	idmap.insert(pair<int, ComPtr<ID3D11ShaderResourceView>>(textureId, m_texture));
-	LOG_PRINT("Creating Texture", fileName, ", id", textureId); 
+	textureId++;
+	idmap.insert(std::pair<int, ComPtr<ID3D11ShaderResourceView>>(textureId, m_texture));
+	LOG_PRINT("Creating Texture %s, id %i", fileName, textureId);
 
 	return textureId;
+}
+
+HRESULT __stdcall kiero::hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
+{
+	if(kiero::g_kieroInitialized == true) {
+	m_states = std::make_unique<CommonStates>(kiero::device);
+	if (!bOnce)
+	{
+		HWND hWindow = NULL;
+		while (!hWindow)
+		{
+			hWindow = FindWindow("grcWindow", NULL);
+			Sleep(100);
+		}
+
+		if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)&kiero::device)))
+		{
+			pSwapChain->GetDevice(__uuidof(kiero::device), (void**)&kiero::device);
+			kiero::device->GetImmediateContext(&kiero::context);
+		}
+
+		ID3D11Texture2D* renderTargetTexture = nullptr;
+		if (SUCCEEDED(pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<LPVOID*>(&renderTargetTexture))))
+		{
+			kiero::device->CreateRenderTargetView(renderTargetTexture, NULL, &kiero::renderTargetView);
+			renderTargetTexture->Release();
+		}
+
+		bOnce = true;
+
+
+	}
+	if (draw == true) {
+		spriteBatch->Begin(SpriteSortMode_BackToFront, m_states->NonPremultiplied());
+		spriteBatch->Draw(texture.Get(), pos, nullptr, color, Rotation, center, scaleFactor, SpriteEffects_None, 1.0F);
+		spriteBatch->End();
+		kiero::context->OMSetRenderTargets(1, &kiero::renderTargetView, NULL);
+		//draw = false;
+	}
+}
+	return oPresent(pSwapChain, SyncInterval, Flags);
 }
 
 DLL_EXPORT void drawTexture(int id, int index, int level, int time,
 	float sizeX, float sizeY, float centerX, float centerY,
 	float posX, float posY, float rotation, float screenHeightScaleFactor,
 	float r, float g, float b, float a) {
-	ComPtr<ID3D11ShaderResourceView> texture = idmap[id];
 
-	//setup sprite drawing
-	m_states = std::make_unique<CommonStates>(pDevice);
-	unique_ptr<SpriteBatch> spriteBatch;
-	spriteBatch = std::make_unique<SpriteBatch>(pContext);
+	texture = idmap[id];
+	drawtime = time;
+	pos = XMFLOAT2(posX, posY);
+	color = SimpleMath::Color(r, g, b, a);
+	Rotation = rotation;
+	center = XMFLOAT2(centerX, centerY);
+	scaleFactor = screenHeightScaleFactor;
+	last_call_time = timeGetTime();
+	bool draw = true;
 
-	unsigned int last_call_time = timeGetTime();
-	bool elapsedtime = false;
-
-	//Use sprites to draw texture
-	while (elapsedtime == false) {
-		spriteBatch->Begin(SpriteSortMode_Deferred, m_states->NonPremultiplied());
-		spriteBatch->Draw(texture.Get(), XMFLOAT2(posX, posY), nullptr, SimpleMath::Color(r, g, b, a), rotation, XMFLOAT2(centerX, centerY), screenHeightScaleFactor);
-		spriteBatch->End();
-		unsigned int now_time = timeGetTime();
-		if (now_time > (last_call_time + time))
-		{
-			elapsedtime = true;
-			last_call_time = timeGetTime(); //last time is re initialized
-		}
-	}
 }

@@ -56,7 +56,7 @@ public:
 
 	std::string     name;
 
-	static void			Start();
+	static void			DirectXHook();
 
 private:
 
@@ -80,9 +80,9 @@ public:
 	eThreadState	Reset( uint32_t scriptHash, void * pArgs, uint32_t argCount ) override;
 	bool					LoadScripts();
 	void					FreeScripts();
-	void					AddScript( HMODULE module, void( *fn )( ) );
+	void					AddScript( HMODULE Module, void( *fn )( ) );
 	void					RemoveScript( void( *fn )( ) );
-	void					RemoveScript( HMODULE module );
+	void					RemoveScript( HMODULE Module );
 };
 
 namespace ScriptManager {

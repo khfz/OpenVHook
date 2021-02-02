@@ -36,27 +36,27 @@ std::string Utility::GetOurModuleFolder() {
 	return currentPath.substr( 0, currentPath.find_last_of( "\\" ) );
 }
 
-std::string Utility::GetModuleFullName(const HMODULE module) {
+std::string Utility::GetModuleFullName(const HMODULE Module) {
 
 	char fileName[MAX_PATH];
-	GetModuleFileNameA(module, fileName, MAX_PATH);
+	GetModuleFileNameA(Module, fileName, MAX_PATH);
 	return fileName;
 }
 
-std::string Utility::GetModuleName(const HMODULE module) {
+std::string Utility::GetModuleName(const HMODULE Module) {
 
-	return GetFilename(GetModuleFullName(module));
+	return GetFilename(GetModuleFullName(Module));
 }
 
-std::string Utility::GetModuleNameWithoutExtension( const HMODULE module ) {
+std::string Utility::GetModuleNameWithoutExtension( const HMODULE Module ) {
 
-	const std::string fileNameWithExtension = GetModuleName(module);
+	const std::string fileNameWithExtension = GetModuleName(Module);
 	return GetFilenameWithoutExtension(fileNameWithExtension);
 }
 
-void Utility::SetOurModuleHandle( const HMODULE module ) {
+void Utility::SetOurModuleHandle( const HMODULE Module ) {
 
-	ourModule = module;
+	ourModule = Module;
 }
 
 HMODULE Utility::GetOurModuleHandle() {

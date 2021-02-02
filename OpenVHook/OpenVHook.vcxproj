@@ -60,6 +60,8 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;libMinHook.x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)OpenVHook\minhook\build\VC16\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
       <Command>xcopy "$(SolutionDir)Build\$(Configuration)\$(TargetName).lib" "$(SolutionDir)SDK\lib\" /Y</Command>
@@ -74,7 +76,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_MBCS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)DirectXTK\Inc\;$(ProjectDir)DirectXTK\Src\;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -83,7 +85,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <TreatLinkerWarningAsErrors>false</TreatLinkerWarningAsErrors>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;libMinHook.x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)OpenVHook\minhook\build\VC16\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
       <Command>
@@ -98,9 +101,9 @@
     <ClCompile Include="DirectXTK\Src\SpriteBatch.cpp" />
     <ClCompile Include="DirectXTK\Src\VertexTypes.cpp" />
     <ClCompile Include="DirectXTK\Src\WICTextureLoader.cpp" />
+    <ClCompile Include="kiero\kiero.cpp" />
     <ClCompile Include="OpenVHook.cpp" />
     <ClCompile Include="Input\InputHook.cpp" />
-    <ClCompile Include="Scripting\Hook.cpp" />
     <ClCompile Include="Scripting\NativeInvoker.cpp" />
     <ClCompile Include="Scripting\Pools.cpp" />
     <ClCompile Include="Scripting\ScriptEngine.cpp" />
@@ -124,7 +127,8 @@
     <ClInclude Include="DirectXTK\Inc\SpriteBatch.h" />
     <ClInclude Include="DirectXTK\Inc\VertexTypes.h" />
     <ClInclude Include="DirectXTK\Inc\WICTextureLoader.h" />
-    <ClInclude Include="Scripting\Hook.h" />
+    <ClInclude Include="kiero\kiero.h" />
+    <ClInclude Include="minhook\include\MinHook.h" />
     <ClInclude Include="Scripting\Pools.h" />
     <ClInclude Include="ASI Loader\ASILoader.h" />
     <ClInclude Include="Input\InputHook.h" />
